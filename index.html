@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SensorLab · Micro-PWA</title>
+  <meta name="theme-color" content="#047857" />
+
+  <script>
+    const manifest = {
+      name: "SensorLab · Tecnología ESO",
+      short_name: "SensorLab",
+      start_url: ".",
+      display: "standalone",
+      background_color: "#ecfdf5",
+      theme_color: "#047857",
+      icons: [
+        {
+          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%23047857'/%3E%3Cpath d='M28 78c10-44 20-44 30 0s20 44 42-22' fill='none' stroke='white' stroke-width='8' stroke-linecap='round'/%3E%3Ccircle cx='34' cy='38' r='10' fill='%23a7f3d0'/%3E%3Ccircle cx='92' cy='86' r='10' fill='%23a7f3d0'/%3E%3C/svg%3E",
+          sizes: "128x128",
+          type: "image/svg+xml"
+        }
+      ]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+    const manifestURL = URL.createObjectURL(manifestBlob);
+    document.write(`<link rel="manifest" href="${manifestURL}">`);
+  </script>
+
+  <style>
+    :root {
+      --bg: #ecfdf5;
+      --panel: #ffffff;
+      --ink: #052e2b;
+      --muted: #64748b;
+      --primary: #047857;
+      --primary-soft: #d1fae5;
+      --danger: #b91c1c;
+      --border: #cde8dc;
+      --radius: 18px;
+      --shadow: 0 12px 30px rgba(6, 95, 70, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      padding: 18px 16px 10px;
+      background: linear-gradient(135deg, #047857, #064e3b);
+      color: white;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 5vw, 2.1rem);
+      line-height: 1.1;
+    }
+
+    header p {
+      margin: 8px 0 0;
+      color: #d1fae5;
+      font-size: 0.95rem;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .layout {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 900px) {
+      .layout {
+        grid-template-columns: 340px 1fr;
+        align-items: start;
+      }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    button {
+      width: 100%;
+      min-height: 46px;
+      border: none;
+      border-radius: 12px;
+      background: var(--primary);
+      color: white;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+
+    button.danger {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+    }
+
+    .metric small {
+      display: block;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .metric strong {
+      font-size: 1rem;
+    }
+
+    .status {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      line-height: 1.4;
+      font-size: 0.92rem;
+    }
+
+    .status.ok {
+      background: #dcfce7;
+      color: #166534;
+      border-color: #86efac;
+    }
+
+    .status.warn {
+      background: #fef3c7;
+      color: #92400e;
+      border-color: #fde68a;
+    }
+
+    .charts {
+      display: grid;
+      gap: 16px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 260px;
+      display: block;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .chart-title {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+
+    .hint {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>SensorLab · Movimiento y sonido</h1>
+    <p>Registrador local de acelerómetro y micrófono con exportación CSV.</p>
+  </header>
+
+  <main>
+    <section class="layout">
+      <aside class="card controls">
+        <button id="requestPermissions">Solicitar permisos</button>
+        <button id="start" disabled>Iniciar registro</button>
+        <button id="stop" class="secondary" disabled>Detener</button>
+        <button id="exportCsv" class="secondary" disabled>Exportar a CSV</button>
+        <button id="clear" class="danger" disabled>Borrar datos</button>
+
+        <div class="status" id="status">
+          Pulsa “Solicitar permisos”. En iOS es obligatorio activar sensores y audio desde una interacción del usuario.
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <small>ax</small>
+            <strong id="ax">0.00</strong>
+          </div>
+          <div class="metric">
+            <small>ay</small>
+            <strong id="ay">0.00</strong>
+          </div>
+          <div class="metric">
+            <small>az</small>
+            <strong id="az">0.00</strong>
+          </div>
+          <div class="metric">
+            <small>|a|</small>
+            <strong id="amag">0.00</strong>
+          </div>
+          <div class="metric">
+            <small>Mic RMS</small>
+            <strong id="rms">0.000</strong>
+          </div>
+          <div class="metric">
+            <small>Muestras</small>
+            <strong id="count">0</strong>
+          </div>
+        </div>
+
+        <p class="hint">
+          Los datos se guardan solo en memoria local del navegador. El CSV incluye tiempo,
+          aceleraciones, módulo de aceleración y amplitud RMS del micrófono.
+        </p>
+      </aside>
+
+      <section class="charts">
+        <div class="card">
+          <h2 class="chart-title">Aceleración |a|</h2>
+          <canvas id="accCanvas" aria-label="Gráfica de aceleración"></canvas>
+        </div>
+
+        <div class="card">
+          <h2 class="chart-title">Amplitud del micrófono RMS</h2>
+          <canvas id="micCanvas" aria-label="Gráfica de amplitud del micrófono"></canvas>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    if ("serviceWorker" in navigator) {
+      const swCode = `
+        const CACHE = "sensorlab-v1";
+        self.addEventListener("install", event => {
+          event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(["./"])));
+          self.skipWaiting();
+        });
+        self.addEventListener("activate", event => {
+          event.waitUntil(self.clients.claim());
+        });
+        self.addEventListener("fetch", event => {
+          event.respondWith(
+            caches.match(event.request).then(cached => {
+              return cached || fetch(event.request).then(response => {
+                const copy = response.clone();
+                caches.open(CACHE).then(cache => cache.put(event.request, copy));
+                return response;
+              }).catch(() => caches.match("./"));
+            })
+          );
+        });
+      `;
+      const swBlob = new Blob([swCode], { type: "text/javascript" });
+      navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.warn);
+    }
+
+    const ui = {
+      requestPermissions: document.getElementById("requestPermissions"),
+      start: document.getElementById("start"),
+      stop: document.getElementById("stop"),
+      exportCsv: document.getElementById("exportCsv"),
+      clear: document.getElementById("clear"),
+      status: document.getElementById("status"),
+      ax: document.getElementById("ax"),
+      ay: document.getElementById("ay"),
+      az: document.getElementById("az"),
+      amag: document.getElementById("amag"),
+      rms: document.getElementById("rms"),
+      count: document.getElementById("count")
+    };
+
+    const accCanvas = document.getElementById("accCanvas");
+    const micCanvas = document.getElementById("micCanvas");
+    const accCtx = accCanvas.getContext("2d");
+    const micCtx = micCanvas.getContext("2d");
+
+    const state = {
+      hasPermissions: false,
+      recording: false,
+      startTime: 0,
+      latestAcc: { x: 0, y: 0, z: 0, mag: 0 },
+      latestRms: 0,
+      rows: [],
+      audioContext: null,
+      analyser: null,
+      micStream: null,
+      audioBuffer: null,
+      animationId: null,
+      sampleTimer: null
+    };
+
+    function setStatus(message, mode = "") {
+      ui.status.textContent = message;
+      ui.status.className = `status ${mode}`;
+    }
+
+    function resizeCanvas(canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function resizeAll() {
+      resizeCanvas(accCanvas);
+      resizeCanvas(micCanvas);
+      drawCharts();
+    }
+
+    async function requestMotionPermission() {
+      /*
+        iOS Safari requiere DeviceMotionEvent.requestPermission().
+        Android/Chrome normalmente no lo requiere, pero sí contexto seguro.
+      */
+      if (typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function") {
+        const response = await DeviceMotionEvent.requestPermission();
+        if (response !== "granted") {
+          throw new Error("Permiso de movimiento denegado.");
+        }
+      }
+    }
+
+    async function requestMicrophonePermission() {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error("Web Audio API no disponible en este navegador.");
+      }
+
+      state.audioContext = new AudioContextClass();
+
+      if (state.audioContext.state === "suspended") {
+        await state.audioContext.resume();
+      }
+
+      state.micStream = stream;
+      state.analyser = state.audioContext.createAnalyser();
+      state.analyser.fftSize = 1024;
+
+      const source = state.audioContext.createMediaStreamSource(stream);
+      source.connect(state.analyser);
+
+      state.audioBuffer = new Float32Array(state.analyser.fftSize);
+    }
+
+    function onDeviceMotion(event) {
+      const a = event.accelerationIncludingGravity || event.acceleration || {};
+      const x = Number(a.x || 0);
+      const y = Number(a.y || 0);
+      const z = Number(a.z || 0);
+      const mag = Math.sqrt(x * x + y * y + z * z);
+
+      state.latestAcc = { x, y, z, mag };
+    }
+
+    function readMicRms() {
+      if (!state.analyser || !state.audioBuffer) return 0;
+
+      state.analyser.getFloatTimeDomainData(state.audioBuffer);
+
+      let sum = 0;
+      for (let i = 0; i < state.audioBuffer.length; i++) {
+        const value = state.audioBuffer[i];
+        sum += value * value;
+      }
+
+      return Math.sqrt(sum / state.audioBuffer.length);
+    }
+
+    function sampleData() {
+      if (!state.recording) return;
+
+      const t = (performance.now() - state.startTime) / 1000;
+      state.latestRms = readMicRms();
+
+      const row = {
+        t,
+        ax: state.latestAcc.x,
+        ay: state.latestAcc.y,
+        az: state.latestAcc.z,
+        amag: state.latestAcc.mag,
+        rms: state.latestRms
+      };
+
+      state.rows.push(row);
+      updateMetrics();
+      drawCharts();
+
+      ui.exportCsv.disabled = state.rows.length === 0;
+      ui.clear.disabled = state.rows.length === 0;
+    }
+
+    function updateMetrics() {
+      ui.ax.textContent = state.latestAcc.x.toFixed(2);
+      ui.ay.textContent = state.latestAcc.y.toFixed(2);
+      ui.az.textContent = state.latestAcc.z.toFixed(2);
+      ui.amag.textContent = state.latestAcc.mag.toFixed(2);
+      ui.rms.textContent = state.latestRms.toFixed(3);
+      ui.count.textContent = String(state.rows.length);
+    }
+
+    function drawChart(canvas, ctx, rows, key, maxY, label) {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const pad = 34;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = "#dbe3ef";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
+      for (let i = 0; i <= 4; i++) {
+        const y = pad + (h - pad * 2) * i / 4;
+        ctx.moveTo(pad, y);
+        ctx.lineTo(w - pad, y);
+      }
+
+      ctx.stroke();
+
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(pad, pad);
+      ctx.lineTo(pad, h - pad);
+      ctx.lineTo(w - pad, h - pad);
+      ctx.stroke();
+
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px system-ui";
+      ctx.textAlign = "left";
+      ctx.fillText(label, pad, 18);
+
+      const visible = rows.slice(-180);
+
+      if (visible.length < 2) {
+        ctx.fillText("Sin datos suficientes", pad + 10, h / 2);
+        return;
+      }
+
+      const minT = visible[0].t;
+      const maxT = visible[visible.length - 1].t || minT + 1;
+      const spanT = Math.max(0.001, maxT - minT);
+
+      ctx.strokeStyle = "#047857";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+
+      visible.forEach((row, index) => {
+        const x = pad + ((row.t - minT) / spanT) * (w - pad * 2);
+        const y = h - pad - Math.min(1, Math.max(0, row[key] / maxY)) * (h - pad * 2);
+
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+
+      ctx.stroke();
+
+      ctx.fillStyle = "#64748b";
+      ctx.textAlign = "right";
+      ctx.fillText(`${maxY}`, pad - 5, pad + 4);
+      ctx.fillText("0", pad - 5, h - pad + 4);
+      ctx.textAlign = "center";
+      ctx.fillText("últimas muestras", w / 2, h - 8);
+    }
+
+    function drawCharts() {
+      drawChart(accCanvas, accCtx, state.rows, "amag", 25, "m/s²");
+      drawChart(micCanvas, micCtx, state.rows, "rms", 0.25, "RMS");
+    }
+
+    function startRecording() {
+      state.rows = [];
+      state.startTime = performance.now();
+      state.recording = true;
+
+      window.addEventListener("devicemotion", onDeviceMotion);
+
+      state.sampleTimer = setInterval(sampleData, 100);
+
+      ui.start.disabled = true;
+      ui.stop.disabled = false;
+      ui.exportCsv.disabled = true;
+      ui.clear.disabled = true;
+
+      setStatus("Registro en marcha: capturando acelerómetro y micrófono cada 100 ms.", "ok");
+    }
+
+    function stopRecording() {
+      state.recording = false;
+
+      window.removeEventListener("devicemotion", onDeviceMotion);
+      clearInterval(state.sampleTimer);
+
+      ui.start.disabled = !state.hasPermissions;
+      ui.stop.disabled = true;
+      ui.exportCsv.disabled = state.rows.length === 0;
+      ui.clear.disabled = state.rows.length === 0;
+
+      setStatus(`Registro detenido. Muestras capturadas: ${state.rows.length}.`, "warn");
+    }
+
+    function exportCsv() {
+      if (state.rows.length === 0) return;
+
+      const header = "t_s,ax_m_s2,ay_m_s2,az_m_s2,amag_m_s2,mic_rms";
+      const lines = state.rows.map(row => {
+        return [
+          row.t.toFixed(3),
+          row.ax.toFixed(5),
+          row.ay.toFixed(5),
+          row.az.toFixed(5),
+          row.amag.toFixed(5),
+          row.rms.toFixed(6)
+        ].join(",");
+      });
+
+      const csv = [header, ...lines].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sensorlab_${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    function clearData() {
+      state.rows = [];
+      state.latestAcc = { x: 0, y: 0, z: 0, mag: 0 };
+      state.latestRms = 0;
+      updateMetrics();
+      drawCharts();
+
+      ui.exportCsv.disabled = true;
+      ui.clear.disabled = true;
+
+      setStatus("Datos borrados. Puedes iniciar un nuevo registro.", "warn");
+    }
+
+    ui.requestPermissions.addEventListener("click", async () => {
+      try {
+        if (!window.isSecureContext) {
+          setStatus("Aviso: sensores, micrófono y Service Worker requieren https:// o localhost en muchos navegadores.", "warn");
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("getUserMedia no está disponible en este navegador.");
+        }
+
+        await requestMotionPermission();
+        await requestMicrophonePermission();
+
+        state.hasPermissions = true;
+        ui.start.disabled = false;
+        ui.requestPermissions.disabled = true;
+
+        setStatus("Permisos concedidos. Ya puedes iniciar el registro.", "ok");
+      } catch (error) {
+        state.hasPermissions = false;
+        ui.start.disabled = true;
+        setStatus(`No se pudieron activar todos los permisos: ${error.message}`, "warn");
+      }
+    });
+
+    ui.start.addEventListener("click", startRecording);
+    ui.stop.addEventListener("click", stopRecording);
+    ui.exportCsv.addEventListener("click", exportCsv);
+    ui.clear.addEventListener("click", clearData);
+
+    window.addEventListener("resize", resizeAll);
+    resizeAll();
+    updateMetrics();
+  </script>
+</body>
+</html>
